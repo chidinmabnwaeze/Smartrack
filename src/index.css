@@ -1,0 +1,52 @@
+@import 'tailwindcss';
+
+/* Design tokens from the GoShip Figma file */
+@theme {
+  --color-brand: #ff3700;
+  --color-brand-faded: #ffa991;
+  --color-brand-soft: #ffdad0;
+  --color-brand-tint: #fff0eb;
+  --color-navy: #123c69;
+  --color-ink: #1f2937;
+  --color-muted: #6b7280;
+  --color-line: #d1d5db;
+  --color-surface: #fbfbfb;
+  --color-field: #f8fafc;
+  --color-table-head: #ededed;
+  --color-table-head-text: #525252;
+  --color-modal-line: #e4e9f5;
+  --color-overlay: rgba(159, 159, 159, 0.41);
+  --color-danger: #ef5350;
+  --color-danger-soft: #fdecea;
+  --color-danger-line: #ffcfca;
+  --color-success-soft: #e6f4e8;
+  --color-info-soft: #e6f2ff;
+
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
+  --font-num: 'Manrope', system-ui, sans-serif;
+
+  --radius-field: 4px;
+  --radius-card: 14px;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    line-height: normal;
+    color: #000;
+    background: var(--color-surface);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .font-display {
+    font-variation-settings:
+      'opsz' 14,
+      'wdth' 100;
+  }
+
+  button:not(:disabled),
+  select {
+    cursor: pointer;
+  }
+}
