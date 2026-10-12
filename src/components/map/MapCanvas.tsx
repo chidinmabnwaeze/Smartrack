@@ -2,11 +2,16 @@ import type { Feature, LineString } from 'geojson'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { useEffect, useRef, useState } from 'react'
+import van from '../../assets/icons/truck.svg'
 import type { Position } from '../../types'
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN
 
 const ROUTE_COLOR = '#3b20d8'
+// The van glides to each new position instead of jumping
+const GLIDE_MS = 1000
+// How long after a position update the van keeps pulsing as "moving"
+const MOVING_MS = 20_000
 
 export interface MapCanvasProps {
   origin: Position
@@ -29,11 +34,16 @@ const line = (coordinates: Position[]): Feature<LineString> => ({
   geometry: { type: 'LineString', coordinates },
 })
 
+// A van in a round badge, with a ring that pulses while position updates keep arriving
 function vehicleElement() {
   const element = document.createElement('div')
   element.className = 'flex items-center gap-2'
   element.innerHTML =
-    '<span data-dot class="block size-5 rounded-full border-[3px] border-white shadow-md"></span>' +
+    '<span class="relative flex size-11 items-center justify-center">' +
+    '<span data-pulse class="absolute inset-0 hidden animate-ping rounded-full"></span>' +
+    '<span data-badge class="relative flex size-11 items-center justify-center rounded-full border-2 bg-white shadow-md">' +
+    `<img data-van src="${van}" alt="" class="w-7 transition-transform" />` +
+    '</span></span>' +
     '<span data-label class="rounded-full bg-white px-2.5 py-1 text-sm font-semibold text-danger shadow-md">Off route</span>'
   return element
 }
@@ -58,6 +68,8 @@ export default function MapCanvas({
   const container = useRef<HTMLDivElement>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const vehicleRef = useRef<mapboxgl.Marker | null>(null)
+  const glideRef = useRef(0)
+  const movingTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const [ready, setReady] = useState(false)
 
   useEffect(() => {
@@ -90,6 +102,8 @@ export default function MapCanvas({
     })
     mapRef.current = map
     return () => {
+      cancelAnimationFrame(glideRef.current)
+      clearTimeout(movingTimer.current)
       map.remove()
       mapRef.current = null
       vehicleRef.current = null
@@ -151,16 +165,42 @@ export default function MapCanvas({
       vehicleRef.current = null
       return
     }
-    if (!vehicleRef.current) {
-      vehicleRef.current = new mapboxgl.Marker({ element: vehicleElement(), anchor: 'left', offset: [-10, 0] })
-        .setLngLat(position)
-        .addTo(map)
-    }
-    const marker = vehicleRef.current.setLngLat(position)
+    const placed = vehicleRef.current
+    const marker =
+      placed ??
+      // Anchored on the left so the "Off route" tag sits beside the van; the offset centres the badge
+      new mapboxgl.Marker({ element: vehicleElement(), anchor: 'left', offset: [-22, 0] }).setLngLat(position).addTo(map)
+    vehicleRef.current = marker
+
     const element = marker.getElement()
-    element.querySelector('[data-dot]')!.classList.toggle('bg-danger', offRoute)
-    element.querySelector('[data-dot]')!.classList.toggle('bg-navy', !offRoute)
-    element.querySelector('[data-label]')!.classList.toggle('hidden', !offRoute)
+    const part = (name: string) => element.querySelector<HTMLElement>(`[data-${name}]`)!
+    part('badge').classList.toggle('border-danger', offRoute)
+    part('badge').classList.toggle('border-navy', !offRoute)
+    part('pulse').classList.toggle('bg-danger/40', offRoute)
+    part('pulse').classList.toggle('bg-navy/40', !offRoute)
+    part('label').classList.toggle('hidden', !offRoute)
+
+    // A position that arrives after the van is already on the map means it is moving now
+    const from = marker.getLngLat()
+    if (placed && (from.lng !== position[0] || from.lat !== position[1])) {
+      // The artwork faces left; it is mirrored when travelling east
+      part('van').classList.toggle('-scale-x-100', position[0] > from.lng)
+      part('pulse').classList.remove('hidden')
+      clearTimeout(movingTimer.current)
+      movingTimer.current = setTimeout(() => part('pulse').classList.add('hidden'), MOVING_MS)
+
+      cancelAnimationFrame(glideRef.current)
+      const startedAt = performance.now()
+      const step = (now: number) => {
+        const progress = Math.min(1, (now - startedAt) / GLIDE_MS)
+        marker.setLngLat([
+          from.lng + (position[0] - from.lng) * progress,
+          from.lat + (position[1] - from.lat) * progress,
+        ])
+        if (progress < 1) glideRef.current = requestAnimationFrame(step)
+      }
+      glideRef.current = requestAnimationFrame(step)
+    }
 
     // A rider who wanders out of view (or behind the left panel) is brought back in
     const { x, y } = map.project(position)
